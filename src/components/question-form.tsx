@@ -1,8 +1,9 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useCompletion } from "ai/react";
 
 import {
   Form,
@@ -15,19 +16,29 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Label } from "./ui/label";
+import { useEffect } from "react";
+
+interface Props {
+  bookId: string;
+}
 
 const FormSchema = z.object({
   question: z
     .string()
     .min(2, {
-      message: "question must have at least 2 characters.",
+      message: "Your question must have at least 2 characters.",
     })
-    .max(50, {
-      message: "question must have less than 50 characters.",
+    .max(100, {
+      message: "Your question must have less than 100 characters.",
     }),
 });
 
-function QuestionForm() {
+function QuestionForm({ bookId }: Props) {
+  const { complete, completion, isLoading, setCompletion } = useCompletion({
+    api: "/api/ask",
+  });
+
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
@@ -35,9 +46,21 @@ function QuestionForm() {
     },
   });
 
+  const values = useWatch({ control: form.control });
+
+  useEffect(() => {
+    if (!!completion) {
+      setCompletion("");
+    }
+  }, [values]);
+
   function onSubmit(values: z.infer<typeof FormSchema>) {
-    // ✅ This will be type-safe and validated.
-    console.log(values.question);
+    complete(values.question, { body: { bookId } });
+  }
+
+  function onReset() {
+    setCompletion("");
+    form.reset({ question: "" });
   }
 
   return (
@@ -61,13 +84,29 @@ function QuestionForm() {
             </FormItem>
           )}
         />
+
+        {!!completion && (
+          <p>
+            <Label>Answer: </Label>
+            {completion}
+          </p>
+        )}
+
         <div className="flex space-x-4">
-          <Button size="lg" type="submit">
-            Submit
-          </Button>
-          <Button variant="secondary" size="lg" type="submit">
-            I'm feeling lucky
-          </Button>
+          {!!completion || isLoading ? (
+            <Button
+              size="lg"
+              disabled={isLoading}
+              type="reset"
+              onClick={onReset}
+            >
+              {isLoading ? "Asking..." : "Ask another question"}
+            </Button>
+          ) : (
+            <Button size="lg" disabled={isLoading} type="submit">
+              Ask
+            </Button>
+          )}
         </div>
       </form>
     </Form>
