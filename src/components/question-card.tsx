@@ -2,21 +2,22 @@ import { Prisma } from "@prisma/client";
 
 import {
   Card,
-  CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 
 type Props = Prisma.QuestionGetPayload<{}>;
 
-function QuestionCard({ question, answer }: Props) {
+function QuestionCard({ question, answer, askCount }: Props) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>{question}</CardTitle>
         <CardDescription>{answer}</CardDescription>
       </CardHeader>
+      <CardFooter>({askCount})</CardFooter>
     </Card>
   );
 }

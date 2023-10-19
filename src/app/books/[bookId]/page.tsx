@@ -9,14 +9,23 @@ interface Props {
 }
 
 async function Book(props: Props) {
-  const book = await db.book.findUniqueOrThrow({
+  const book = await db.book.findUnique({
     where: { id: props.params.bookId },
-    include: { questions: true },
+    include: {
+      questions: {
+        take: 10,
+        orderBy: {
+          askCount: "desc",
+        },
+      },
+    },
   });
+
+  if (!book) return <div>404</div>;
 
   return (
     <main>
-      <div className="flex mb-8">
+      <div className="lg:flex mb-8">
         {book.image && (
           <Image
             src={book.image}
@@ -28,12 +37,12 @@ async function Book(props: Props) {
 
         <div className="p-4 max-w-prose">
           <h1 className="mb-2">{book.title}</h1>
-          <p className="mb-4">{book.description}</p>
+          <p className="mb-4 text-muted-foreground">{book.description}</p>
         </div>
       </div>
 
-      <div className="mb-12">
-        <QuestionForm />
+      <div className="max-w-prose mb-12">
+        <QuestionForm bookId={book.id} />
       </div>
 
       <h3 className="mb-4">See what other people are asking...</h3>

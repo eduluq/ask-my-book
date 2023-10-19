@@ -22,7 +22,8 @@ export default function RootLayout({ children }: Props) {
       <head></head>
       <body className={inter.className}>
         <Header />
-        <div className="p-24">{children}</div>
+
+        <div className="p-6 pt-24 lg:p-24 ">{children}</div>
       </body>
     </html>
   );
