@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { OpenAI } from "langchain/llms/openai";
+import { PromptTemplate } from "langchain/prompts";
 import { StreamingTextResponse, LangChainStream } from "ai";
+import { Prisma } from "@prisma/client";
 
 import db from "@/lib/db";
 
@@ -25,6 +27,45 @@ const stringToStream = (str: string) => {
   });
 };
 
+const answerQueryWithContext = async (
+  questionAsked: string,
+  book: Prisma.BookGetPayload<{ include: { questions: true } }>,
+  handleCompletition: (answer: string, context: string) => void
+) => {
+  const prompt = PromptTemplate.fromTemplate(
+    "{bookAuthor} is the author of the book {bookTitle}. These are questions and answers by him. Please keep your answers to three sentences maximum, and speak in complete sentences. Stop speaking once your point is made.\n\nContext that may be useful, pulled from {bookTitle}:\n {bookQuestions} \n\n\nQ: {questionAsked}\n\nA: "
+  );
+
+  const context = ""; // TODO - get most relevant context
+
+  const formattedPrompt = await prompt.format({
+    bookTitle: book.title,
+    bookAuthor: "Sahil Lavingia",
+    bookQuestions: book.questions
+      .map((q) => `\n\n\nQ: ${q.question}\n\nA: ${q.answer}`)
+      .join(""),
+    questionAsked,
+  });
+
+  const llm = new OpenAI({
+    openAIApiKey: process.env.VERCEL_OPENAI_API_KEY,
+    temperature: 0,
+    streaming: true,
+  });
+
+  const { stream, handlers } = LangChainStream({
+    onCompletion: async (completion) => {
+      handleCompletition(completion, context);
+    },
+  });
+
+  console.log("prompt", formattedPrompt);
+
+  llm.call(formattedPrompt, {}, [handlers]).catch(console.error);
+
+  return stream;
+};
+
 export async function POST(request: Request) {
   const body = await request.json();
   let questionAsked = body.prompt;
@@ -32,7 +73,19 @@ export async function POST(request: Request) {
 
   if (!bookId) throw new Error("bookId is required");
 
-  revalidatePath(`/book/${bookId}`);
+  const book = await db.book.findUnique({
+    where: { id: bookId },
+    include: {
+      questions: {
+        take: 10,
+        orderBy: {
+          askCount: "desc",
+        },
+      },
+    },
+  });
+
+  if (!book) throw new Error("book not found");
 
   if (!questionAsked.endsWith("?")) questionAsked += "?";
 
@@ -56,19 +109,17 @@ export async function POST(request: Request) {
       },
     });
 
+    revalidatePath(`/book/${bookId}`);
+
     const stream = stringToStream(previousQuestion.answer || "");
 
     return new StreamingTextResponse(stream);
   }
 
-  const llm = new OpenAI({
-    openAIApiKey: process.env.VERCEL_OPENAI_API_KEY,
-    temperature: 0,
-    streaming: true,
-  });
-
-  const { stream, handlers } = LangChainStream({
-    onCompletion: async (completion) => {
+  const stream = await answerQueryWithContext(
+    questionAsked,
+    book,
+    async (answer, context) => {
       await db.book.update({
         where: {
           id: bookId,
@@ -77,16 +128,16 @@ export async function POST(request: Request) {
           questions: {
             create: {
               question: questionAsked,
-              answer: completion,
-              // context: ""
+              answer,
+              context,
             },
           },
         },
       });
-    },
-  });
 
-  llm.call(questionAsked, {}, [handlers]).catch(console.error);
+      revalidatePath(`/book/${bookId}`);
+    }
+  );
 
   return new StreamingTextResponse(stream);
 }
