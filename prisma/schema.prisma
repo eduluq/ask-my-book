@@ -1,0 +1,30 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider  = "postgresql"
+    url       = env("POSTGRES_PRISMA_URL") // uses connection pooling
+    directUrl = env("POSTGRES_URL_NON_POOLING") // uses a direct connection
+}
+
+model Book {
+    id           String     @id @default(cuid())
+    title        String
+    description  String?
+    image        String?    @db.VarChar(255)
+    externalLink String?    @db.VarChar(255)
+    questions    Question[]
+}
+
+model Question {
+    id        String   @id @default(cuid())
+    question  String   @db.VarChar(140)
+    context   String?
+    answer    String?  @db.VarChar(1000)
+    askCount  Int      @default(1)
+    createdAt DateTime @default(now())
+
+    book   Book   @relation(fields: [bookId], references: [id])
+    bookId String
+}
