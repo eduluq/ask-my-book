@@ -49,7 +49,7 @@ async function Book(props: Props) {
       <ul className="gap-4 sm:columns-1 md:columns-2 lg:columns-3 xl:columns-4 [&>li:not(:first-child)]:mt-4">
         {book.questions.map((question) => {
           return (
-            <li key={question.id}>
+            <li key={question.id} className="break-inside-avoid mb-4">
               <QuestionCard {...question} />
             </li>
           );
