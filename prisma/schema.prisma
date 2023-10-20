@@ -12,6 +12,7 @@ model Book {
     id           String     @id @default(cuid())
     title        String
     description  String?
+    author       String?
     image        String?    @db.VarChar(255)
     externalLink String?    @db.VarChar(255)
     questions    Question[]

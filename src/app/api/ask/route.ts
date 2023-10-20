@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { OpenAI } from "langchain/llms/openai";
 import { PromptTemplate } from "langchain/prompts";
+import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import { VercelPostgres } from "langchain/vectorstores/vercel_postgres";
 import { StreamingTextResponse, LangChainStream } from "ai";
 import { Prisma } from "@prisma/client";
 
@@ -33,17 +35,39 @@ const answerQueryWithContext = async (
   handleCompletition: (answer: string, context: string) => void
 ) => {
   const prompt = PromptTemplate.fromTemplate(
-    "{bookAuthor} is the author of the book {bookTitle}. These are questions and answers by him. Please keep your answers to three sentences maximum, and speak in complete sentences. Stop speaking once your point is made.\n\nContext that may be useful, pulled from {bookTitle}:\n {bookQuestions} \n\n\nQ: {questionAsked}\n\nA: "
+    "{bookAuthor} is the author of the book {bookTitle}. These are questions and answers by him. Please keep your answers to three sentences maximum, and speak in complete sentences. Stop speaking once your point is made.\n\nContext that may be useful, pulled from {bookTitle}: \n\n{context} {bookQuestions} \n\n\nQ: {questionAsked}\n\nA: "
   );
 
-  const context = ""; // TODO - get most relevant context
+  const vectorStore = await VercelPostgres.initialize(
+    new OpenAIEmbeddings({
+      openAIApiKey: process.env.VERCEL_OPENAI_API_KEY,
+    }),
+    {
+      tableName: "book_vector_store",
+    }
+  );
+
+  const relevantSections = await vectorStore.similaritySearch(
+    questionAsked,
+    10,
+    {
+      bookId: book.id,
+    }
+  );
+
+  const formattedBookQuestions = book.questions
+    .map((q) => `\n\n\nQ: ${q.question.trim()}\n\nA: ${q.answer}`)
+    .join("");
+
+  const formattedRelevantSections = relevantSections
+    .map((s) => `- ${s.pageContent.trim()}\n\n`)
+    .join("");
 
   const formattedPrompt = await prompt.format({
     bookTitle: book.title,
-    bookAuthor: "Sahil Lavingia",
-    bookQuestions: book.questions
-      .map((q) => `\n\n\nQ: ${q.question}\n\nA: ${q.answer}`)
-      .join(""),
+    bookAuthor: book.author,
+    bookQuestions: formattedBookQuestions,
+    context: formattedRelevantSections,
     questionAsked,
   });
 
@@ -55,7 +79,7 @@ const answerQueryWithContext = async (
 
   const { stream, handlers } = LangChainStream({
     onCompletion: async (completion) => {
-      handleCompletition(completion, context);
+      handleCompletition(completion, formattedRelevantSections);
     },
   });
 
