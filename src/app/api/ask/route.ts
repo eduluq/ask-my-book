@@ -7,37 +7,9 @@ import { StreamingTextResponse, LangChainStream } from "ai";
 import { Prisma } from "@prisma/client";
 
 import db from "@/lib/db";
+import { stringToStream } from "@/lib/utils";
 
-// Set the runtime to edge for best performance
-// export const runtime = "edge";
-
-const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
-
-const stringToStream = (str: string) => {
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    async start(controller) {
-      for (let i = 0; i < str.length; i++) {
-        const char = str.charAt(i);
-        controller.enqueue(encoder.encode(char));
-        const randomWaiting = Math.floor(Math.random() * 10) + 5;
-        await delay(randomWaiting);
-      }
-      controller.close();
-    },
-  });
-};
-
-const answerQueryWithContext = async (
-  questionAsked: string,
-  book: Prisma.BookGetPayload<{ include: { questions: true } }>,
-  handleCompletition: (answer: string, context: string) => void
-) => {
-  const prompt = PromptTemplate.fromTemplate(
-    "{bookAuthor} is the author of the book {bookTitle}. These are questions and answers by him. Please keep your answers to three sentences maximum, and speak in complete sentences. Stop speaking once your point is made.\n\nContext that may be useful, pulled from {bookTitle}: \n\n{context} {bookQuestions} \n\n\nQ: {questionAsked}\n\nA: "
-  );
-
+const getContext = async (questionAsked: string, bookId: string) => {
   const vectorStore = await VercelPostgres.initialize(
     new OpenAIEmbeddings({
       openAIApiKey: process.env.VERCEL_OPENAI_API_KEY,
@@ -51,51 +23,76 @@ const answerQueryWithContext = async (
     questionAsked,
     10,
     {
-      bookId: book.id,
+      bookId: bookId,
     }
+  );
+
+  const formattedRelevantSections = relevantSections
+    .map((s) => `- ${s.pageContent.trim()}\n\n`)
+    .join("");
+
+  return formattedRelevantSections;
+};
+
+const getPrompt = async (
+  questionAsked: string,
+  context: string,
+  book: Prisma.BookGetPayload<{ include: { questions: true } }>
+) => {
+  const promptTemplate = PromptTemplate.fromTemplate(
+    "{bookAuthor} is the author of the book {bookTitle}. These are questions and answers by him. Please keep your answers to three sentences maximum, and speak in complete sentences. Stop speaking once your point is made.\n\nContext that may be useful, pulled from {bookTitle}: \n\n{context} {bookQuestions} \n\n\nQ: {questionAsked}\n\nA: "
   );
 
   const formattedBookQuestions = book.questions
     .map((q) => `\n\n\nQ: ${q.question.trim()}\n\nA: ${q.answer}`)
     .join("");
 
-  const formattedRelevantSections = relevantSections
-    .map((s) => `- ${s.pageContent.trim()}\n\n`)
-    .join("");
-
-  const formattedPrompt = await prompt.format({
+  const formattedPrompt = await promptTemplate.format({
     bookTitle: book.title,
     bookAuthor: book.author,
     bookQuestions: formattedBookQuestions,
-    context: formattedRelevantSections,
+    context,
     questionAsked,
   });
 
+  return formattedPrompt;
+};
+
+const answerBookQuestion = async (
+  questionAsked: string,
+  book: Prisma.BookGetPayload<{ include: { questions: true } }>,
+  handleCompletition: (answer: string, context: string) => void
+) => {
   const llm = new OpenAI({
     openAIApiKey: process.env.VERCEL_OPENAI_API_KEY,
     temperature: 0,
     streaming: true,
   });
 
+  const context = await getContext(questionAsked, book.id);
+  const prompt = await getPrompt(questionAsked, context, book);
+
+  console.log(prompt);
+
   const { stream, handlers } = LangChainStream({
     onCompletion: async (completion) => {
-      handleCompletition(completion, formattedRelevantSections);
+      handleCompletition(completion, context);
     },
   });
 
-  console.log("prompt", formattedPrompt);
-
-  llm.call(formattedPrompt, {}, [handlers]).catch(console.error);
+  llm.call(prompt, {}, [handlers]).catch(console.error);
 
   return stream;
 };
 
 export async function POST(request: Request) {
   const body = await request.json();
+
   let questionAsked = body.prompt;
   const bookId = body.bookId;
 
   if (!bookId) throw new Error("bookId is required");
+  if (!questionAsked) throw new Error("prompt is required");
 
   const book = await db.book.findUnique({
     where: { id: bookId },
@@ -140,7 +137,7 @@ export async function POST(request: Request) {
     return new StreamingTextResponse(stream);
   }
 
-  const stream = await answerQueryWithContext(
+  const stream = await answerBookQuestion(
     questionAsked,
     book,
     async (answer, context) => {
