@@ -1,12 +1,8 @@
-import { cache } from "react";
-import Link from "next/link";
+import { Suspense } from "react";
 
-import db from "@/lib/db";
-import BookCard from "@/components/book-card";
+import BookList, { BookListSkeleton } from "@/components/book-list";
 
-async function Book() {
-  const books = await db.book.findMany()
-
+async function Home() {
   return (
     <main>
       <div className="max-w-prose mb-8">
@@ -21,19 +17,11 @@ async function Book() {
         </ul>
       </div>
 
-      <ul className="flex space-x-4">
-        {books.map((book) => {
-          return (
-            <li key={book.id} className="max-w-lg">
-              <Link href={`/books/${book.id}`}>
-                <BookCard {...book} />
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      <Suspense fallback={<BookListSkeleton />}>
+        <BookList />
+      </Suspense>
     </main>
   );
 }
 
-export default Book;
+export default Home;

@@ -14,7 +14,6 @@ import { Button } from "./ui/button";
 type Props = Prisma.BookGetPayload<{}>;
 
 function truncate(input: string) {
-  console.log(input, input.length);
   if (input.length > 250) {
     return input.substring(0, 250) + "...";
   }
@@ -36,7 +35,7 @@ function BookCard({ title, description, image }: Props) {
               height="0"
               sizes="100vw"
               className="w-2/3 h-auto"
-              loading="lazy"
+              priority
             />
           )}
 
