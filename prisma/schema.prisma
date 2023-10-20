@@ -19,12 +19,13 @@ model Book {
 }
 
 model Question {
-    id        String   @id @default(cuid())
-    question  String   @db.VarChar(140)
-    context   String?
-    answer    String?  @db.VarChar(1000)
-    askCount  Int      @default(1)
-    createdAt DateTime @default(now())
+    id                String   @id @default(cuid())
+    question          String   @db.VarChar(140)
+    context           String?
+    answer            String?  @db.VarChar(1000)
+    askCount          Int      @default(1)
+    publishedByAuthor Boolean  @default(false)
+    createdAt         DateTime @default(now())
 
     book   Book   @relation(fields: [bookId], references: [id])
     bookId String

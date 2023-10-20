@@ -99,6 +99,7 @@ export async function POST(request: Request) {
     include: {
       questions: {
         take: 10,
+        where: { publishedByAuthor: true },
         orderBy: {
           askCount: "desc",
         },
