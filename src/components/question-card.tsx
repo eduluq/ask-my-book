@@ -17,7 +17,9 @@ function QuestionCard({ question, answer, askCount }: Props) {
         <CardTitle>{question}</CardTitle>
         <CardDescription>{answer}</CardDescription>
       </CardHeader>
-      <CardFooter>({askCount})</CardFooter>
+      <CardFooter>
+        ({askCount} {askCount > 1 ? "times" : "time"} asked)
+      </CardFooter>
     </Card>
   );
 }
