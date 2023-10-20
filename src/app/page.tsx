@@ -5,7 +5,7 @@ import db from "@/lib/db";
 import BookCard from "@/components/book-card";
 
 async function Book() {
-  const books = await cache(async () => await db.book.findMany())();
+  const books = await db.book.findMany()
 
   return (
     <main>
@@ -24,7 +24,7 @@ async function Book() {
       <ul className="flex space-x-4">
         {books.map((book) => {
           return (
-            <li key={book.id} className="max-w-xs">
+            <li key={book.id} className="max-w-lg">
               <Link href={`/books/${book.id}`}>
                 <BookCard {...book} />
               </Link>
